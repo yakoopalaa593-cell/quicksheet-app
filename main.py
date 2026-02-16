@@ -1,0 +1,89 @@
+import streamlit as st
+import google.generativeai as genai
+from PIL import Image
+import json
+import os
+from dotenv import load_dotenv
+import io
+import re
+import pandas as pd
+
+load_dotenv()
+
+PAYMENT_LINK = os.getenv("STRIPE_PAYMENT_LINK", "https://buy.stripe.com/test_4gMfZi6HC68raRc0VZdZ601")
+
+if 'user_info' not in st.session_state:
+    st.session_state.user_info = None
+if 'usage_count' not in st.session_state:
+    st.session_state.usage_count = 0
+if 'is_premium' not in st.session_state:
+    st.session_state.is_premium = False
+
+def login():
+    st.title("QuickSheet AI Pro 📊")
+    st.write("Welcome Hero! Simplify your work with AI.")
+    if st.button("Start Free Trial"):
+        st.session_state.user_info = {"name": "Hero"}
+        st.rerun()
+
+if not st.session_state.user_info:
+    login()
+else:
+    st.sidebar.write(f"Hello, **{st.session_state.user_info['name']}**")
+    status = "💎 Premium" if st.session_state.is_premium else "🆓 Free"
+    st.sidebar.markdown(f"**Status:** {status}")
+    
+    if not st.session_state.is_premium:
+        st.sidebar.write(f"Usage: {st.session_state.usage_count}/3")
+        st.sidebar.markdown(f'<a href="{PAYMENT_LINK}" target="_blank"><button style="width: 100%; background-color: #00d084; color: white; padding: 10px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold;">Upgrade to Premium 🚀</button></a>', unsafe_allow_html=True)
+        if st.sidebar.button("I already paid ✅"):
+            st.session_state.is_premium = True
+            st.rerun()
+
+    if st.sidebar.button("Logout"):
+        st.session_state.user_info = None
+        st.rerun()
+
+    st.title("📊 QuickSheet AI - Business")
+
+    # تعريف المتغير هنا أولاً حتى يختفي الخطأ
+    uploaded_files = st.file_uploader("Upload tables", type=['png', 'jpg', 'jpeg'], accept_multiple_files=True)
+
+    if not st.session_state.is_premium and st.session_state.usage_count >= 3:
+        st.error("Trial ended. Upgrade to continue.")
+    else:
+        if uploaded_files:
+            if st.button("Process Now 🚀"):
+                if not st.session_state.is_premium and (st.session_state.usage_count + len(uploaded_files) > 3):
+                    st.warning("Limit reached!")
+                else:
+                    with st.spinner('AI is analyzing...'):
+                        all_results = []
+                        user_prompt = """
+                        Extract all data from this image into a JSON list of objects.
+                        Each object represents a row in the table.
+                        Ensure all objects have the same keys (headers).
+                        Return ONLY the raw JSON. No markdown code blocks, no preamble.
+                        """
+                        genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+                        model = genai.GenerativeModel('gemini-2.5-flash')
+
+                        for uploaded_file in uploaded_files:
+                            try:
+                                img = Image.open(uploaded_file)
+                                response = model.generate_content([user_prompt, img])
+                                clean_json = re.sub(r'```json|```', '', response.text).strip()
+                                data = json.loads(clean_json)
+                                if isinstance(data, list): all_results.extend(data)
+                                else: all_results.append(data)
+                                if not st.session_state.is_premium: st.session_state.usage_count += 1
+                            except Exception as e:
+                                st.error(f"Error with {uploaded_file.name}")
+
+                        if all_results:
+                            df = pd.DataFrame(all_results)
+                            st.dataframe(df)
+                            buffer = io.BytesIO()
+                            with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+                                df.to_excel(writer, index=False)
+                            st.download_button("Download Excel 📥", buffer.getvalue(), "Data.xlsx")
