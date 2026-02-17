@@ -73,33 +73,30 @@ else:
                         model = genai.GenerativeModel('gemini-2.5-flash')
                         buffer = io.BytesIO()
                         writer = pd.ExcelWriter(buffer, engine='openpyxl')
+                        with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
                         for uploaded_file in uploaded_files:
                             try:
                                 img = Image.open(uploaded_file)
                                 response = model.generate_content([user_prompt, img])
                                 clean_json = re.sub(r'```json|```', '', response.text).strip()
                                 data = json.loads(clean_json)
+                                  df_temp = pd.DataFrame(data if isinstance(data, list) else [data])
+                                sheet_name = f"Sheet_{uploaded_file.name[:20]}"
+                                df_temp.to_excel(writer, sheet_name=sheet_name, index=False)
                                 if isinstance(data, list): all_results.extend(data)
                                 else: all_results.append(data)
                                 if not st.session_state.is_premium: st.session_state.usage_count += 1
                             except Exception as e:
                                 st.error(f"Error with {uploaded_file.name}")
 
-                            df_temp = pd.DataFrame(data if isinstance(data, list) else [data])
-        sheet_name = f"Sheet_{uploaded_file.name[:20]}"
-        df_temp.to_excel(writer, sheet_name=sheet_name, index=False)
-        st.write(f"✅: {uploaded_file.name}")
-        st.dataframe(df)
-        buffer = io.BytesIO()
-        with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-         df.to_excel(writer, index=False)
+                         
+                                st.download_button(
+                                    label="Download Excel 📥",
+                                    data=buffer.getvalue(),
+                                    file_name="Multi_Page_Data.xlsx",
+                                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                                )
 
-        st.download_button(
-    label="Download Excel 📥",
-    data=buffer.getvalue(),
-    file_name="Multi_Page_Data.xlsx",
-    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-)
 
 
 
