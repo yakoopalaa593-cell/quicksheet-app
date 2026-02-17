@@ -57,7 +57,7 @@ else:
           user_not=st.text_input("write a note to AI")
         if st.button("Process Now 🚀"):
              st.success("VERY GOOD JOB AGENT")
-                if not st.session_state.is_premium and (st.session_state.usage_count + len(uploaded_files) > 10):
+        if not st.session_state.is_premium and (st.session_state.usage_count + len(uploaded_files) > 10):
                     st.warning("Limit reached!")
                 else:
                     with st.spinner('AI is analyzing...'):
@@ -100,6 +100,7 @@ else:
     file_name="Multi_Page_Data.xlsx",
     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 )
+
 
 
 
