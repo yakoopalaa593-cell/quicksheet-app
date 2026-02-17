@@ -59,7 +59,7 @@ else:
              st.success("VERY GOOD JOB AGENT")
         if not st.session_state.is_premium and (st.session_state.usage_count + len(uploaded_files) > 10):
                     st.warning("Limit reached!")
-                else:
+        else:
                     with st.spinner('AI is analyzing...'):
                         all_results = []
                         user_prompt = """
@@ -100,6 +100,7 @@ else:
     file_name="Multi_Page_Data.xlsx",
     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 )
+
 
 
 
