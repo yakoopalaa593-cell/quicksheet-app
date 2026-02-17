@@ -54,7 +54,7 @@ else:
         st.error("Trial ended. Upgrade to continue.")
     else:
         if uploaded_files:
-             user_not=st.text_input("write a note to AI")
+          user_not=st.text_input("write a note to AI")
             if st.button("Process Now 🚀"):
                 if not st.session_state.is_premium and (st.session_state.usage_count + len(uploaded_files) > 5):
                     st.warning("Limit reached!")
@@ -91,3 +91,4 @@ else:
                                 df.to_excel(writer, index=False)
 
                             st.download_button("Download Excel 📥", buffer.getvalue(), "Data.xlsx")
+
