@@ -23,38 +23,40 @@ def login():
     st.title("QuickSheet AI Pro 📊")
     st.write("Welcome Hero! Simplify your work with AI.")
     if st.button("Start Free Trial"):
-        st.session_state.user_info = {"name": "Hero"}
+        st.session_state.user_info = {"name": "AGENT"}
         st.rerun()
 
 if not st.session_state.user_info:
     login()
 else:
     st.sidebar.write(f"Hello, **{st.session_state.user_info['name']}**")
-    status = "💎 Premium" if st.session_state.is_premium else "🆓 Free"
+    status = "💎WELCOME IN VIP Premium" if st.session_state.is_premium else "🆓 Free"
     st.sidebar.markdown(f"**Status:** {status}")
-    
+    if st.sidebar.button("Logout"):
+        st.session_state.user_info = None
+        st.rerun()
+        
     if not st.session_state.is_premium:
-        st.sidebar.write(f"Usage: {st.session_state.usage_count}/3")
+        st.sidebar.write(f"Usage: {st.session_state.usage_count}/5")
         st.sidebar.markdown(f'<a href="{PAYMENT_LINK}" target="_blank"><button style="width: 100%; background-color: #00d084; color: white; padding: 10px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold;">Upgrade to Premium 🚀</button></a>', unsafe_allow_html=True)
         if st.sidebar.button("I already paid ✅"):
             st.session_state.is_premium = True
             st.rerun()
 
-    if st.sidebar.button("Logout"):
-        st.session_state.user_info = None
-        st.rerun()
+   
 
     st.title("📊 QuickSheet AI - Business")
 
     # تعريف المتغير هنا أولاً حتى يختفي الخطأ
     uploaded_files = st.file_uploader("Upload tables", type=['png', 'jpg', 'jpeg'], accept_multiple_files=True)
 
-    if not st.session_state.is_premium and st.session_state.usage_count >= 3:
+    if not st.session_state.is_premium and st.session_state.usage_count >= 5:
         st.error("Trial ended. Upgrade to continue.")
     else:
         if uploaded_files:
+             user_not=st.text_input("write a note to AI")
             if st.button("Process Now 🚀"):
-                if not st.session_state.is_premium and (st.session_state.usage_count + len(uploaded_files) > 3):
+                if not st.session_state.is_premium and (st.session_state.usage_count + len(uploaded_files) > 5):
                     st.warning("Limit reached!")
                 else:
                     with st.spinner('AI is analyzing...'):
@@ -64,6 +66,7 @@ else:
                         Each object represents a row in the table.
                         Ensure all objects have the same keys (headers).
                         Return ONLY the raw JSON. No markdown code blocks, no preamble.
+                        use the user note
                         """
                         genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
                         model = genai.GenerativeModel('gemini-2.5-flash')
@@ -86,4 +89,5 @@ else:
                             buffer = io.BytesIO()
                             with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
                                 df.to_excel(writer, index=False)
+
                             st.download_button("Download Excel 📥", buffer.getvalue(), "Data.xlsx")
