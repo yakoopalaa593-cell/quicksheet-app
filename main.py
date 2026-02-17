@@ -37,7 +37,7 @@ else:
         st.rerun()
         
     if not st.session_state.is_premium:
-        st.sidebar.write(f"Usage: {st.session_state.usage_count}/5")
+        st.sidebar.write(f"Usage: {st.session_state.usage_count}/10")
         st.sidebar.markdown(f'<a href="{PAYMENT_LINK}" target="_blank"><button style="width: 100%; background-color: #00d084; color: white; padding: 10px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold;">Upgrade to Premium 🚀</button></a>', unsafe_allow_html=True)
         if st.sidebar.button("I already paid ✅"):
             st.session_state.is_premium = True
@@ -50,13 +50,13 @@ else:
     # تعريف المتغير هنا أولاً حتى يختفي الخطأ
     uploaded_files = st.file_uploader("Upload tables", type=['png', 'jpg', 'jpeg'], accept_multiple_files=True)
 
-    if not st.session_state.is_premium and st.session_state.usage_count >= 5:
+    if not st.session_state.is_premium and st.session_state.usage_count >= 10:
         st.error("Trial ended. Upgrade to continue.")
     else:
         if uploaded_files:
           user_not=st.text_input("write a note to AI")
         if st.button("Process Now 🚀"):
-                if not st.session_state.is_premium and (st.session_state.usage_count + len(uploaded_files) > 5):
+                if not st.session_state.is_premium and (st.session_state.usage_count + len(uploaded_files) > 10):
                     st.warning("Limit reached!")
                 else:
                     with st.spinner('AI is analyzing...'):
@@ -91,5 +91,6 @@ else:
                                 df.to_excel(writer, index=False)
 
                             st.download_button("Download Excel 📥", buffer.getvalue(), "Data.xlsx")
+
 
 
