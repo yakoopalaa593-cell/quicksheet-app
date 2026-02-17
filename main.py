@@ -72,7 +72,7 @@ else:
                         genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
                         model = genai.GenerativeModel('gemini-2.5-flash')
                         buffer = io.BytesIO()
-                         writer = pd.ExcelWriter(buffer, engine='openpyxl')
+                        writer = pd.ExcelWriter(buffer, engine='openpyxl')
                         for uploaded_file in uploaded_files:
                             try:
                                 img = Image.open(uploaded_file)
@@ -100,6 +100,7 @@ else:
     file_name="Multi_Page_Data.xlsx",
     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 )
+
 
 
 
