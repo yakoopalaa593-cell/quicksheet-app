@@ -56,6 +56,7 @@ else:
         if uploaded_files:
           user_not=st.text_input("write a note to AI")
         if st.button("Process Now 🚀"):
+             st.success("VERY GOOD JOB AGENT")
                 if not st.session_state.is_premium and (st.session_state.usage_count + len(uploaded_files) > 10):
                     st.warning("Limit reached!")
                 else:
@@ -70,7 +71,8 @@ else:
                         """
                         genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
                         model = genai.GenerativeModel('gemini-2.5-flash')
-
+                        buffer = io.BytesIO()
+                         writer = pd.ExcelWriter(buffer, engine='openpyxl')
                         for uploaded_file in uploaded_files:
                             try:
                                 img = Image.open(uploaded_file)
@@ -83,14 +85,22 @@ else:
                             except Exception as e:
                                 st.error(f"Error with {uploaded_file.name}")
 
-                        if all_results:
-                            df = pd.DataFrame(all_results)
+                            df_temp = pd.DataFrame(data if isinstance(data, list) else [data])
+        sheet_name = f"Sheet_{uploaded_file.name[:20]}"
+        df_temp.to_excel(writer, sheet_name=sheet_name, index=False)
+        st.write(f"✅: {uploaded_file.name}")
                             st.dataframe(df)
                             buffer = io.BytesIO()
                             with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
                                 df.to_excel(writer, index=False)
 
-                            st.download_button("Download Excel 📥", buffer.getvalue(), "Data.xlsx")
+                            st.download_button(
+    label="Download Excel 📥",
+    data=buffer.getvalue(),
+    file_name="Multi_Page_Data.xlsx",
+    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+)
+
 
 
 
