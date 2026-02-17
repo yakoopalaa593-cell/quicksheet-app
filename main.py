@@ -80,9 +80,9 @@ else:
                                     response = model.generate_content([user_prompt, img])
                                     clean_json = re.sub(r'```json|```', '', response.text).strip()
                                     data = json.loads(clean_json)
-                                         df_temp = pd.DataFrame(data if isinstance(data, list) else [data])
-                                         sheet_name = f"Sheet_{uploaded_file.name[:20]}"
-                                         df_temp.to_excel(writer, sheet_name=sheet_name, index=False)
+                                    df_temp = pd.DataFrame(data if isinstance(data, list) else [data])
+                                    sheet_name = f"Sheet_{uploaded_file.name[:20]}"
+                                    df_temp.to_excel(writer, sheet_name=sheet_name, index=False)
                                     if isinstance(data, list): all_results.extend(data)
                                     else: all_results.append(data)
                                     if not st.session_state.is_premium: st.session_state.usage_count += 1
@@ -96,6 +96,7 @@ else:
                                     file_name="Multi_Page_Data.xlsx",
                                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                                 )
+
 
 
 
