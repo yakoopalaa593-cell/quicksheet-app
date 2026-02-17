@@ -1,4 +1,4 @@
-يعقوب, [2/17/2026 1:20 PM]
+
 import streamlit as st
 import google.generativeai as genai
 from PIL import Image
@@ -129,3 +129,4 @@ append(data)
                         )
                     except Exception as e:
                         st.error(f"Excel Error: {e}")
+
