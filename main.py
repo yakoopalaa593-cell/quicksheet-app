@@ -92,7 +92,7 @@ else:
         st.dataframe(df)
         buffer = io.BytesIO()
         with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-        df.to_excel(writer, index=False)
+         df.to_excel(writer, index=False)
 
         st.download_button(
     label="Download Excel 📥",
@@ -100,6 +100,7 @@ else:
     file_name="Multi_Page_Data.xlsx",
     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 )
+
 
 
 
