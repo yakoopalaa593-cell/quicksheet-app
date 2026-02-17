@@ -89,17 +89,18 @@ else:
         sheet_name = f"Sheet_{uploaded_file.name[:20]}"
         df_temp.to_excel(writer, sheet_name=sheet_name, index=False)
         st.write(f"✅: {uploaded_file.name}")
-                            st.dataframe(df)
-                            buffer = io.BytesIO()
-                            with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-                                df.to_excel(writer, index=False)
+        st.dataframe(df)
+        buffer = io.BytesIO()
+        with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+        df.to_excel(writer, index=False)
 
-                            st.download_button(
+        st.download_button(
     label="Download Excel 📥",
     data=buffer.getvalue(),
     file_name="Multi_Page_Data.xlsx",
     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 )
+
 
 
 
