@@ -89,7 +89,7 @@ else:
             else:
                 with st.spinner('AI is analyzing...'):
                     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-                    model = genai.GenerativeModel('gemini-1.5-flash')
+                    model = genai.GenerativeModel('gemini-2.5-flash')
                     buffer = io.BytesIO()
                     processed_any = False
                     
@@ -123,3 +123,4 @@ else:
                             st.warning("No data found in the images.")
                     except Exception as e:
                         st.error(f"Error: {e}")
+
