@@ -88,34 +88,56 @@ else:
             else:
                 with st.spinner('AI is analyzing...'):
                     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-                    model = genai.GenerativeModel('gemini-2.5-flash')
+                    model = genai.GenerativeModel('gemini-1.5-flash')
                     buffer = io.BytesIO()
                     processed_any = False
                     
+                    # فحص إذا كان المستخدم يريد الدمج
+                    should_merge = any(word in user_note.lower() for word in ["اجمع", "دمج", "merge", "combine", "جدول واحد"])
+                    
+                    # برومبت خارق لاستخراج كافة التفاصيل والأعمدة
+                    detailed_prompt = f"""
+                    Extract EVERY single detail and column from the provided image(s). 
+                    Include Date, Invoice Number, Items, Quantity, Price, Total, and any other visible headers.
+                    Return the data strictly as a JSON list of objects []. 
+                    If multiple images are provided and 'merge' is implied, combine them into one list.
+                    Note: {user_note}
+                    """
+
                     try:
-                        with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-                            for uploaded_file in uploaded_files:
-                                img = Image.open(uploaded_file)
-                                prompt = f"Extract ALL data to JSON list of objects. If no table, return []. Note: {user_note}"
-                                response = model.generate_content([prompt, img])
-                                clean_json = re.search(r'\[.*\]', response.text, re.DOTALL)
-                                
-                                if clean_json:
-                                    data = json.loads(clean_json.group())
-                                    if data:
-                                        df_temp = pd.DataFrame(data)
-                                        if not df_temp.empty:
-                                           sheet_name = f"sheet_{uploaded_file.name[:15]}"
-                                           df_temp.to_excel(writer, sheet_name=sheet_name, index=False)
-                                            
-                                            # سحر التوسيع التلقائي للأعمدة 🪄
-                                        worksheet = writer.sheets[sheet_name]
-                                        for idx, col in enumerate(df_temp.columns):
+                        if should_merge:
+                            images = [Image.open(f) for f in uploaded_files]
+                            response = model.generate_content([detailed_prompt, *images])
+                            clean_json = re.search(r'\[.*\]', response.text, re.DOTALL)
+                            if clean_json:
+                                data = json.loads(clean_json.group())
+                                if data:
+                                    df_final = pd.DataFrame(data)
+                                    with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+                                        df_final.to_excel(writer, sheet_name="Combined_Data", index=False)
+                                        ws = writer.sheets["Combined_Data"]
+                                        for idx, col in enumerate(df_final.columns):
+                                            max_len = max(df_final[col].astype(str).map(len).max(), len(str(col))) + 2
+                                            ws.column_dimensions[chr(65 + idx)].width = max_len
+                                    processed_any = True
+                        else:
+                            with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+                                for uploaded_file in uploaded_files:
+                                    img = Image.open(uploaded_file)
+                                    response = model.generate_content([detailed_prompt, img])
+                                    clean_json = re.search(r'\[.*\]', response.text, re.DOTALL)
+                                    if clean_json:
+                                        data = json.loads(clean_json.group())
+                                        if data:
+                                            df_temp = pd.DataFrame(data)
+                                            sh_name = f"sheet_{uploaded_file.name[:15]}"
+                                            df_temp.to_excel(writer, sheet_name=sh_name, index=False)
+                                            ws = writer.sheets[sh_name]
+                                            for idx, col in enumerate(df_temp.columns):
                                                 max_len = max(df_temp[col].astype(str).map(len).max(), len(str(col))) + 2
-                                                worksheet.column_dimensions[chr(65 + idx)].width = max_len
-                                            
-                                        processed_any = True
-                                        st.write(f"✅ {uploaded_file.name} processed")
+                                                ws.column_dimensions[chr(65 + idx)].width = max_len
+                                            processed_any = True
+                                            st.write(f"✅ {uploaded_file.name} processed")
 
                         if processed_any:
                             if not st.session_state.is_premium:
@@ -123,7 +145,6 @@ else:
                                 df_all = get_data()
                                 df_all.loc[df_all['username'] == st.session_state.user_info['name'], 'usage'] = st.session_state.usage_count
                                 save_data(df_all)
-                            
                             st.success("SUCCESS! DOWNLOAD YOUR FILE BELOW")
                             st.download_button("Download Excel 📥", buffer.getvalue(), "Data.xlsx")
                         else:
