@@ -77,7 +77,6 @@ else:
 
     st.title("📊 QuickSheet AI - Business")
     uploaded_files = st.file_uploader("Upload tables", type=['png', 'jpg', 'jpeg'], accept_multiple_files=True)
-
     if not st.session_state.is_premium and st.session_state.usage_count >= 10:
         st.error("Trial ended. Upgrade to continue.")
     else:
@@ -105,18 +104,18 @@ else:
                                     data = json.loads(clean_json.group())
                                     if data:
                                         df_temp = pd.DataFrame(data)
-                    if not df_temp.empty:
-                        sheet_name = f"sheet_{uploaded_file.name[:15]}"
-                        df_temp.to_excel(writer, sheet_name=sheet_name, index=False)
-                        
-                        # سحر التوسيع التلقائي للأعمدة 🪄
-                        worksheet = writer.sheets[sheet_name]
-                        for idx, col in enumerate(df_temp.columns):
-                            max_len = max(df_temp[col].astype(str).map(len).max(), len(str(col))) + 2
-                            worksheet.column_dimensions[chr(65 + idx)].width = max_len
-                        
-                        processed_any = True
-                        st.write(f"✅ {uploaded_file.name} processed")
+                                        if not df_temp.empty:
+                                           sheet_name = f"sheet_{uploaded_file.name[:15]}"
+                                           df_temp.to_excel(writer, sheet_name=sheet_name, index=False)
+                                            
+                                            # سحر التوسيع التلقائي للأعمدة 🪄
+                                        worksheet = writer.sheets[sheet_name]
+                                        for idx, col in enumerate(df_temp.columns):
+                                                max_len = max(df_temp[col].astype(str).map(len).max(), len(str(col))) + 2
+                                                worksheet.column_dimensions[chr(65 + idx)].width = max_len
+                                            
+                                        processed_any = True
+                                        st.write(f"✅ {uploaded_file.name} processed")
 
                         if processed_any:
                             if not st.session_state.is_premium:
@@ -131,5 +130,3 @@ else:
                             st.warning("No data found in the images.")
                     except Exception as e:
                         st.error(f"Error: {e}")
-
-
