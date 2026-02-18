@@ -3,4 +3,5 @@ google-generativeai
 Pillow
 pandas
 openpyxl
+st-gsheets-connection
 python-dotenv
