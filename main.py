@@ -5,117 +5,79 @@ import json
 import io
 import re
 import pandas as pd
-from streamlit_gsheets import GSheetsConnection
+import gspread
+from google.oauth2.service_account import Credentials
 
-API_KEY = st.secrets["GEMINI_API_KEY"]
+scope = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+creds = Credentials.from_service_account_info(st.secrets["gcp_service_account"], scopes=scope)
+client = gspread.authorize(creds)
+
 SHEET_URL = st.secrets["GSHEETS_URL"]
-
-conn = st.connection("gsheets", type=GSheetsConnection)
+sh = client.open_by_url(SHEET_URL)
+worksheet = sh.get_worksheet(0)
 
 def get_data():
     try:
-        return conn.read(spreadsheet=SHEET_URL, ttl=0)
+        data = worksheet.get_all_records()
+        return pd.DataFrame(data)
     except:
         return pd.DataFrame(columns=['username', 'usage', 'status'])
 
 def save_data(df):
-    conn.update(spreadsheet=SHEET_URL, data=df)
+    worksheet.clear()
+    worksheet.update([df.columns.values.tolist()] + df.values.tolist())
 
-if 'user_info' not in st.session_state:
-    st.session_state.user_info = None
-if 'usage_count' not in st.session_state:
-    st.session_state.usage_count = 0
-if 'is_premium' not in st.session_state:
-    st.session_state.is_premium = False
+if 'user' not in st.session_state:
+    st.session_state.user = None
 
-def login():
+if not st.session_state.user:
     st.title("QuickSheet AI Pro 📊")
-    st.write("Welcome Hero! Simplify your work with AI.")
     name = st.text_input("Enter your Name/Email to start:")
     if st.button("Start Now 🚀"):
         if name:
             df = get_data()
             user_row = df[df['username'] == name]
             if user_row.empty:
-                new_user = pd.DataFrame([{"username": name, "usage": 0, "status": "Free"}])
-                df = pd.concat([df, new_user], ignore_index=True)
-                save_data(df)
-                st.session_state.user_info = {"name": name}
-                st.session_state.usage_count = 0
-                st.session_state.is_premium = False
+                new_user = {"username": name, "usage": 0, "status": "Free"}
+                worksheet.append_row([name, 0, "Free"])
+                st.session_state.user = new_user
             else:
-                user_dict = user_row.iloc[0].to_dict()
-                st.session_state.user_info = {"name": user_dict['username']}
-                st.session_state.usage_count = int(user_dict['usage'])
-                st.session_state.is_premium = (user_dict['status'] == "VIP")
+                st.session_state.user = user_row.iloc[0].to_dict()
             st.rerun()
-
-if not st.session_state.user_info:
-    login()
 else:
-    st.sidebar.write(f"Hello, {st.session_state.user_info['name']}")
-    status = "💎 VIP Premium" if st.session_state.is_premium else "🆓 Free"
-    st.sidebar.markdown(f"Status: {status}")
+    user = st.session_state.user
+    st.sidebar.write(f"Hello, {user['username']}")
+    st.sidebar.info(f"Usage: {user['usage']}/10 | {user['status']}")
     
     if st.sidebar.button("Logout"):
-        st.session_state.user_info = None
+        st.session_state.user = None
         st.rerun()
         
-    if not st.session_state.is_premium:
-        st.sidebar.write(f"Usage: {st.session_state.usage_count}/10")
-        payment_url = "https://buy.stripe.com/test_4gMfZi6HC68raRc0VZdZ601"
-        st.sidebar.markdown(f'<a href="{payment_url}" target="_blank"><button style="width: 100%; background-color: #00d084; color: white; padding: 10px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold;">Upgrade to Premium 🚀</button></a>', unsafe_allow_html=True)
-        if st.sidebar.button("I already paid ✅"):
-            df = get_data()
-            df.loc[df['username'] == st.session_state.user_info['name'], 'status'] = "VIP"
-            save_data(df)
-            st.session_state.is_premium = True
-            st.rerun()
+    if user['status'] != "VIP":
+        st.sidebar.markdown(f'<a href="{st.secrets["STRIPE_PAYMENT_LINK"]}" target="_blank"><button style="width:100%; background-color:#00d084; color:white; border:none; padding:10px; border-radius:5px; font-weight:bold; cursor:pointer;">Upgrade to VIP 🚀</button></a>', unsafe_allow_html=True)
 
-    st.title("📊 QuickSheet AI - Business")
-    uploaded_files = st.file_uploader("Upload tables", type=['png', 'jpg', 'jpeg'], accept_multiple_files=True)
-
-    if not st.session_state.is_premium and st.session_state.usage_count >= 10:
-        st.error("Trial ended. Upgrade to continue.")
-    else:
-        user_note = st.text_input("Write a note to AI (optional)") if uploaded_files else ""
-            
-        if st.button("Process Now 🚀"):
-            if not uploaded_files:
-                st.error("Please upload images first.")
-            else:
-                with st.spinner('AI is analyzing...'):
-                    genai.configure(api_key=API_KEY)
-                    model = genai.GenerativeModel('gemini-2.0-flash')
-                    buffer = io.BytesIO()
-                    
-                    try:
-                        with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-                            for uploaded_file in uploaded_files:
-                                img = Image.open(uploaded_file)
-                                prompt = f"Extract ALL data to JSON. Note: {user_note}"
-                                response = model.generate_content([prompt, img])
-                                clean_json = re.search(r'\[.*\]', response.text, re.DOTALL)
-                                
-                                if clean_json:
-                                    data = json.loads(clean_json.group())
-                                    df_temp = pd.DataFrame(data)
-                                    sheet_name = f"sheet_{uploaded_file.name[:15]}"
-                                    df_temp.to_excel(writer, sheet_name=sheet_name, index=False)
-                                    
-                                    worksheet = writer.sheets[sheet_name]
-                                    for col in worksheet.columns:
-                                        max_len = max([len(str(cell.value) or "") for cell in col])
-                                        worksheet.column_dimensions[col[0].column_letter].width = max_len + 2
-                                    st.write(f"✅ {uploaded_file.name} processed")
-
-                        if not st.session_state.is_premium:
-                            st.session_state.usage_count += len(uploaded_files)
-                            df_all = get_data()
-                            df_all.loc[df_all['username'] == st.session_state.user_info['name'], 'usage'] = st.session_state.usage_count
-                            save_data(df_all)
-                            
-                        st.success("SUCCESS! DOWNLOAD YOUR FILE BELOW")
-                        st.download_button("Download Excel 📥", buffer.getvalue(), "Data.xlsx")
-                    except Exception as e:
-                        st.error(f"Error: {e}")
+    files = st.file_uploader("Upload Tables", type=['png', 'jpg', 'jpeg'], accept_multiple_files=True)
+    if st.button("Process 🚀") and files:
+        if user['status'] != "VIP" and int(user['usage']) >= 10:
+            st.error("Limit reached!")
+        else:
+            with st.spinner("Analyzing..."):
+                genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+                model = genai.GenerativeModel('gemini-1.5-flash')
+                buffer = io.BytesIO()
+                with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+                    for f in files:
+                        img = Image.open(f)
+                        resp = model.generate_content(["Extract table to JSON", img])
+                        match = re.search(r'\[.*\]', resp.text, re.DOTALL)
+                        if match:
+                            pd.DataFrame(json.loads(match.group())).to_excel(writer, sheet_name=f.name[:20], index=False)
+                
+                if user['status'] != "VIP":
+                    df_all = get_data()
+                    new_usage = int(user['usage']) + len(files)
+                    df_all.loc[df_all['username'] == user['username'], 'usage'] = new_usage
+                    save_data(df_all)
+                    st.session_state.user['usage'] = new_usage
+                
+                st.download_button("Download Excel 📥", buffer.getvalue(), "Result.xlsx")
