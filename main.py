@@ -61,14 +61,13 @@ else:
                 st.warning("Limit reached!")
             else:
                 with st.spinner('AI is analyzing...'):
-                    all_results = []
                     user_prompt = f"""
-                    Extract all data from this image into a JSON list of objects.
-                    Each object represents a row in the table.
-                    Ensure all objects have the same keys (headers).
-                    Return ONLY the raw JSON. No markdown code blocks, no preamble.
-                    User note: {user_note}
+                    Extract ALL columns and ALL rows from this image. 
+                    Convert it into a clean JSON list of objects.
+                    IMPORTANT: {user_note}
+                    Return ONLY the raw JSON. No markdown code blocks.
                     """
+                    
                     genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
                     model = genai.GenerativeModel('gemini-2.0-flash')
                     buffer = io.BytesIO()
@@ -85,14 +84,16 @@ else:
                                     df_temp = pd.DataFrame(data if isinstance(data, list) else [data])
                                     sheet_name = f"sheet_{uploaded_file.name[:20]}"
                                     df_temp.to_excel(writer, sheet_name=sheet_name, index=False)
-                                    worksheet = writer.sheets[sheet_name]
+                                    
+                                    
+                                    worksheet = writer.book[sheet_name]
                                     for col in worksheet.columns:
-                                     max_length = 0
-                                    column = col[0].column_letter
-                                    for cell in col:
-                                        if cell.value:
-                                            max_length = max(max_length, len(str(cell.value)))
-                                    worksheet.column_dimensions[column].width = max_length + 2
+                                        max_length = 0
+                                        column = col[0].column_letter
+                                        for cell in col:
+                                            if cell.value:
+                                                max_length = max(max_length, len(str(cell.value)))
+                                        worksheet.column_dimensions[column].width = max_length + 2
                                     
                                     if isinstance(data, list): all_results.extend(data)
                                     else: all_results.append(data)
@@ -116,3 +117,4 @@ else:
                         st.error(f"Excel Error: {e}")
 
                                     
+
