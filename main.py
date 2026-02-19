@@ -21,9 +21,9 @@ sheet = client.open_by_url(SHEET_URL).sheet1
 def get_data():
     try:
         data = sheet.get_all_records()
-        return pd.DataFrame(data) if data else pd.DataFrame(columns=['username', 'usage', 'status'])
+        return pd.DataFrame(data) if data else pd.DataFrame(columns=['username', 'usage', 'status', 'receipt_img'])
     except:
-        return pd.DataFrame(columns=['username', 'usage', 'status'])
+        return pd.DataFrame(columns=['username', 'usage', 'status', 'receipt_img'])
 
 def save_data(df):
     sheet.clear()
@@ -45,7 +45,7 @@ if not st.session_state.user_info:
             df = get_data()
             user_row = df[df['username'] == name]
             if user_row.empty:
-                sheet.append_row([name, 0, "Free"])
+                sheet.append_row([name, 0, "Free", ""])
                 st.session_state.user_info = {"name": name}
                 st.session_state.usage_count = 0
                 st.session_state.is_premium = False
@@ -66,14 +66,20 @@ else:
         
     if not st.session_state.is_premium:
         st.sidebar.write(f"Usage: {st.session_state.usage_count}/10")
-        payment_url = st.secrets["STRIPE_PAYMENT_LINK"]
-        st.sidebar.markdown(f'<a href="{payment_url}" target="_blank"><button style="width: 100%; background-color: #00d084; color: white; padding: 10px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold;">Upgrade to Premium 🚀</button></a>', unsafe_allow_html=True)
-        if st.sidebar.button("I already paid ✅"):
-            df = get_data()
-            df.loc[df['username'] == st.session_state.user_info['name'], 'status'] = "VIP"
-            save_data(df)
-            st.session_state.is_premium = True
-            st.rerun()
+        st.sidebar.markdown("---")
+        st.sidebar.subheader("Upgrade to VIP 🚀")
+        st.sidebar.write("Subscription: $25 / Month")
+        st.sidebar.write("Transfer to QiCard number:")
+        st.sidebar.code("7280146585")
+        receipt = st.sidebar.file_uploader("Upload Transfer Screenshot", type=['png', 'jpg', 'jpeg'])
+        if st.sidebar.button("Confirm Payment ✅"):
+            if receipt:
+                st.sidebar.success("Receipt sent! Admin will activate your VIP soon.")
+                df = get_data()
+                df.loc[df['username'] == st.session_state.user_info['name'], 'receipt_img'] = "Pending Verification"
+                save_data(df)
+            else:
+                st.sidebar.error("Please upload the receipt first.")
 
 st.title("📊 QuickSheet AI - Business")
 uploaded_files = st.file_uploader("Upload tables", type=['png', 'jpg', 'jpeg'], accept_multiple_files=True)
@@ -92,18 +98,17 @@ else:
                 model = genai.GenerativeModel('gemini-2.0-flash')
                 buffer = io.BytesIO()
                 processed_any = False
-                
                 should_merge = any(word in user_note.lower() for word in ["اجمع", "دمج", "merge", "combine", "واحد", "وحده"])
                 
-                detailed_prompt = f"""Act as a professional data entry expert. Your task is to extract ALL information from the provided image(s) without missing a single detail.
-                1. Identify all data points: headers, table rows, and individual labels (like Date, Receipt No, Phone, etc.).
-                2. Structure the output as a flat JSON list of objects.
-                3. For every row in a table, include all the standalone information found in the image (metadata) as additional keys in that row's object.
-                4. Do not limit yourself to specific column names; use whatever labels or headers are present in the image.
-                5. If handwriting is present, use context to provide the most accurate transcription.
-                6. If multiple images are provided, combine all extracted rows into one single continuous list.
-                Special User Instructions: {user_note}
-                Return ONLY the raw JSON list.
+                detailed_prompt = f"""
+                Act as a professional data entry expert. Extract ALL information from the image(s).
+                1. Identify headers, rows, and labels (Date, Receipt No, Phone, etc.).
+                2. Structure as a flat JSON list of objects [].
+                3. Include all metadata (Date, Phone, etc.) in every row object.
+                4. Use the exact labels found in the image.
+                5. If multiple images, combine rows into one continuous list.
+                Special Note: {user_note}
+                Return ONLY raw JSON.
                 """
 
                 try:
