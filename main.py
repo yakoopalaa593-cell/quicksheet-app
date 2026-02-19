@@ -95,11 +95,15 @@ else:
                 
                 should_merge = any(word in user_note.lower() for word in ["اجمع", "دمج", "merge", "combine", "واحد", "وحده"])
                 
-                detailed_prompt = f"""Extract EVERY single detail and column from the provided image(s). 
-                Return the data strictly as a JSON list of objects []. 
-                If multiple images are provided, combine all rows into ONE single continuous list (Vertical integration).
-                Ensure all objects use the same keys (column names) based on the first table found.
-                Note: {user_note}
+                detailed_prompt = f"""Act as a professional data entry expert. Your task is to extract ALL information from the provided image(s) without missing a single detail.
+                1. Identify all data points: headers, table rows, and individual labels (like Date, Receipt No, Phone, etc.).
+                2. Structure the output as a flat JSON list of objects.
+                3. For every row in a table, include all the standalone information found in the image (metadata) as additional keys in that row's object.
+                4. Do not limit yourself to specific column names; use whatever labels or headers are present in the image.
+                5. If handwriting is present, use context to provide the most accurate transcription.
+                6. If multiple images are provided, combine all extracted rows into one single continuous list.
+                Special User Instructions: {user_note}
+                Return ONLY the raw JSON list.
                 """
 
                 try:
