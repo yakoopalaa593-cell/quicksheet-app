@@ -64,6 +64,7 @@ else:
     
     if st.sidebar.button("Logout"):
         st.session_state.user_info = None
+        st.session_state.current_df = None
         st.rerun()
         
     if not st.session_state.is_premium:
@@ -98,7 +99,6 @@ else:
                 try:
                     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
                     model = genai.GenerativeModel('gemini-2.0-flash')
-                    processed_any = False
                     should_merge = any(word in user_note.lower() for word in ["اجمع", "دمج", "merge", "combine", "واحد", "وحده"])
                     
                     detailed_prompt = f"""
@@ -120,7 +120,6 @@ else:
                             data = json.loads(clean_json.group())
                             if data:
                                 st.session_state.current_df = pd.DataFrame(data)
-                                processed_any = True
                     else:
                         all_data = []
                         for uploaded_file in uploaded_files:
@@ -133,19 +132,17 @@ else:
                                     all_data.extend(data)
                         if all_data:
                             st.session_state.current_df = pd.DataFrame(all_data)
-                            processed_any = True
 
-                    if processed_any:
+                    if st.session_state.current_df is not None:
                         if not st.session_state.is_premium:
                             st.session_state.usage_count += len(uploaded_files)
-                            df_all = get_data()
-                            df_all.loc[df_all['username'] == st.session_state.user_info['name'], 'usage'] = st.session_state.usage_count
-                            save_data(df_all)
+                            df_db = get_data()
+                            df_db.loc[df_db['username'] == st.session_state.user_info['name'], 'usage'] = st.session_state.usage_count
+                            save_data(df_db)
                         st.success("Analysis Complete!")
                 except Exception as e:
                     st.error(f"Error: {e}")
 
-    # --- Conversational Execution & Download Section ---
     if st.session_state.current_df is not None:
         st.divider()
         st.subheader("Interactive Data Chat 💬")
@@ -153,25 +150,27 @@ else:
         
         chat_input = st.chat_input("Ask AI to Sort, Filter, or Modify this table...")
         if chat_input:
-            with st.spinner('AI is updating your table...'):
-                chat_model = genai.GenerativeModel('gemini-2.0-flash')
-                chat_prompt = f"""
-                You are a Pandas expert. Update the DataFrame 'df' based on: {chat_input}.
-                Columns: {list(st.session_state.current_df.columns)}.
-                Return ONLY valid Python code starting with 'df = '. No talk.
-                """
-                chat_res = chat_model.generate_content(chat_prompt)
-                code_match = re.search(r'df\s*=\s*.*', chat_res.text)
-                if code_match:
-                    try:
-                        df = st.session_state.current_df
-                        exec(code_match.group())
-                        st.session_state.current_df = df
-                        st.rerun()
-                    except:
-                        st.error("Failed to execute command.")
+            with st.spinner('AI is updating...'):
+                try:
+                    chat_model = genai.GenerativeModel('gemini-2.0-flash')
+                    chat_prompt = f"""
+                    Update the pandas DataFrame 'df' based on: {chat_input}.
+                    Columns: {list(st.session_state.current_df.columns)}.
+                    Rules:
+                    1. Return ONLY the python code. 
+                    2. If adding/summing, convert columns to numeric: df['col'] = pd.to_numeric(df['col'], errors='coerce').
+                    3. Ensure the result is stored back in 'df'.
+                    """
+                    chat_res = chat_model.generate_content(chat_prompt)
+                    clean_code = chat_res.text.replace('```python', '').replace('```', '').strip()
+                    
+                    ldict = {'df': st.session_state.current_df.copy(), 'pd': pd}
+                    exec(clean_code, globals(), ldict)
+                    st.session_state.current_df = ldict['df']
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Could not execute command: {e}")
 
-        # Excel Download with Width Formatting
         buffer = io.BytesIO()
         with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
             st.session_state.current_df.to_excel(writer, index=False, sheet_name="Sheet1")
