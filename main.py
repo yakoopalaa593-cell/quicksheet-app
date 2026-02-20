@@ -29,6 +29,46 @@ def save_data(df):
     sheet.clear()
     sheet.update([df.columns.values.tolist()] + df.values.tolist())
 
+def perform_validation(df):
+    errors = []
+    cols = df.columns.tolist()
+    qty_col = next((c for c in cols if any(x in c for x in ['كمية', 'الكمية', 'Qty'])), None)
+    price_col = next((c for c in cols if any(x in c for x in ['سعر', 'السعر', 'Price'])), None)
+    total_col = next((c for c in cols if any(x in c for x in ['اجمالي', 'الإجمالي', 'Total'])), None)
+    
+    if qty_col and price_col and total_col:
+        for index, row in df.iterrows():
+            try:
+                q = float(re.sub(r'[^\d.]', '', str(row[qty_col])))
+                p = float(re.sub(r'[^\d.]', '', str(row[price_col])))
+                t = float(re.sub(r'[^\d.]', '', str(row[total_col])))
+                if abs((q * p) - t) > 1:
+                    errors.append(index)
+            except:
+                continue
+    return errors
+
+def show_insights(df):
+    st.subheader("📊 التحليل الفوري الذكي")
+    col1, col2, col3 = st.columns(3)
+    
+    total_val = 0
+    cols = df.columns.tolist()
+    total_col = next((c for c in cols if any(x in c for x in ['اجمالي', 'الإجمالي', 'Total'])), None)
+    item_col = next((c for c in cols if any(x in c for x in ['مادة', 'المادة', 'Item'])), None)
+    
+    if total_col:
+        total_val = pd.to_numeric(df[total_col].astype(str).replace(r'[^\d.]', '', regex=True), errors='coerce').sum()
+    
+    with col1:
+        st.metric("إجمالي المبالغ", f"{total_val:,.0f} د.ع")
+    with col2:
+        if item_col:
+            top_item = df[item_col].value_counts().idxmax()
+            st.metric("أكثر مادة تكراراً", str(top_item))
+    with col3:
+        st.metric("عدد القيود", len(df))
+
 if 'user_info' not in st.session_state:
     st.session_state.user_info = None
 if 'usage_count' not in st.session_state:
@@ -84,29 +124,26 @@ else:
 st.title("📊 QuickSheet AI - Business")
 uploaded_files = st.file_uploader("Upload tables", type=['png', 'jpg', 'jpeg'], accept_multiple_files=True)
 
-if not st.session_state.is_premium and st.session_state.usage_count >= 10:
-    st.error("Trial ended. Upgrade to continue.")
-else:
-    user_note = st.text_input("Write a note to AI (optional)") if uploaded_files else ""
-        
-    if st.button("Process Now 🚀"):
-        if not uploaded_files:
-            st.error("Please upload images first.")
-        else:
+if uploaded_files:
+    if not st.session_state.is_premium and st.session_state.usage_count >= 10:
+        st.error("Trial ended. Upgrade to continue.")
+    else:
+        user_note = st.text_input("Write a note to AI (optional)")
+            
+        if st.button("Process Now 🚀"):
             with st.spinner('AI is analyzing...'):
                 genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
                 model = genai.GenerativeModel('gemini-2.0-flash')
                 buffer = io.BytesIO()
                 processed_any = False
+                df_to_display = None
                 should_merge = any(word in user_note.lower() for word in ["اجمع", "دمج", "merge", "combine", "واحد", "وحده"])
                 
                 detailed_prompt = f"""
                 Act as a professional data entry expert. Extract ALL information from the image(s).
                 1. Identify headers, rows, and labels (Date, Receipt No, Phone, etc.).
                 2. Structure as a flat JSON list of objects [].
-                3. Include all metadata (Date, Phone, etc.) in every row object.
-                4. Use the exact labels found in the image.
-                5. If multiple images, combine rows into one continuous list.
+                3. Include all metadata in every row object.
                 Special Note: {user_note}
                 Return ONLY raw JSON.
                 """
@@ -119,13 +156,16 @@ else:
                         if clean_json:
                             data = json.loads(clean_json.group())
                             if data:
-                                df_final = pd.DataFrame(data)
+                                df_to_display = pd.DataFrame(data)
+                                error_indices = perform_validation(df_to_display)
+                                show_insights(df_to_display)
+                                if error_indices:
+                                    st.warning(f"⚠️ تم كشف أخطاء حسابية في {len(error_indices)} سطور. يرجى مراجعة اللون الأحمر.")
+                                
+                                st.dataframe(df_to_display.style.apply(lambda x: ['background-color: #ffcccc' if x.name in error_indices else '' for _ in x], axis=1))
+                                
                                 with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-                                    df_final.to_excel(writer, sheet_name="Combined_Data", index=False)
-                                    ws = writer.sheets["Combined_Data"]
-                                    for idx, col in enumerate(df_final.columns):
-                                        max_len = max(df_final[col].astype(str).map(len).max(), len(str(col))) + 2
-                                        ws.column_dimensions[chr(65 + idx)].width = max_len
+                                    df_to_display.to_excel(writer, sheet_name="Combined_Data", index=False)
                                 processed_any = True
                     else:
                         with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
@@ -139,13 +179,9 @@ else:
                                         df_temp = pd.DataFrame(data)
                                         sh_name = f"sheet_{uploaded_file.name[:15]}"
                                         df_temp.to_excel(writer, sheet_name=sh_name, index=False)
-                                        ws = writer.sheets[sh_name]
-                                        for idx, col in enumerate(df_temp.columns):
-                                            max_len = max(df_temp[col].astype(str).map(len).max(), len(str(col))) + 2
-                                            ws.column_dimensions[chr(65 + idx)].width = max_len
                                         processed_any = True
                                         st.write(f"✅ {uploaded_file.name} processed")
-
+                    
                     if processed_any:
                         if not st.session_state.is_premium:
                             st.session_state.usage_count += len(uploaded_files)
@@ -154,7 +190,5 @@ else:
                             save_data(df_all)
                         st.success("SUCCESS! DOWNLOAD YOUR FILE BELOW")
                         st.download_button("Download Excel 📥", buffer.getvalue(), "Data.xlsx")
-                    else:
-                        st.warning("No data found in the images.")
                 except Exception as e:
                     st.error(f"Error: {e}")
