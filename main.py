@@ -39,45 +39,10 @@ if 'current_df' not in st.session_state:
     st.session_state.current_df = None
 
 if not st.session_state.user_info:
-    st.set_page_config(page_title="QuickSheet AI Pro", layout="wide")
-    
-    st.title("🚀 QuickSheet AI Pro")
-    st.subheader("إيكو يرحب بك! حول وصولاتك الورقية إلى تقارير ذكية بثوانٍ")
-    
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.info("🎯 **دقة عالية**\nاستخراج البيانات بذكاء اصطناعي متطور.")
-    with col2:
-        st.success("📊 **تحليل تلقائي**\nAuto Insights تشرح لك الأرقام فوراً.")
-    with col3:
-        st.warning("💬 **دردشة ذكية**\nتحدث مع بياناتك واطلب منها ما تشاء.")
-
-    st.divider()
-    
-    st.write("### 💳 اختر خطتك المناسبة")
-    p_col1, p_col2 = st.columns(2)
-    with p_col1:
-        st.markdown("""
-        **الخطة المجانية (Free)**
-        - 10 محاولات تحليل.
-        - استخراج الجداول الأساسية.
-        - دعم فني محدود.
-        - **السعر: 0$**
-        """)
-    with p_col2:
-        st.markdown("""
-        **خطة المحترفين (VIP) 💎**
-        - محاولات غير محدودة.
-        - دمج الصور المتعددة (Smart Merge).
-        - تحليل Auto Insights متقدم.
-        - **السعر: 25$ / شهرياً**
-        """)
-    
-    st.divider()
-    
-    st.write("### 🔑 تسجيل الدخول للبدء")
-    name = st.text_input("أدخل اسمك أو بريدك الإلكتروني:")
-    if st.button("دخول إلى النظام 🚀"):
+    st.title("QuickSheet AI Pro 📊")
+    st.write("Welcome Hero! Simplify your work with AI.")
+    name = st.text_input("Enter your Name/Email to start:")
+    if st.button("Start Now 🚀"):
         if name:
             df = get_data()
             user_row = df[df['username'] == name]
@@ -93,44 +58,44 @@ if not st.session_state.user_info:
                 st.session_state.is_premium = (user_dict['status'] == "VIP")
             st.rerun()
 else:
-    st.sidebar.write(f"أهلاً بك يا بطل، {st.session_state.user_info['name']}")
+    st.sidebar.write(f"Hello, {st.session_state.user_info['name']}")
     status = "💎 VIP Premium" if st.session_state.is_premium else "🆓 Free"
-    st.sidebar.markdown(f"الحالة: {status}")
+    st.sidebar.markdown(f"Status: {status}")
     
-    if st.sidebar.button("تسجيل الخروج"):
+    if st.sidebar.button("Logout"):
         st.session_state.user_info = None
         st.session_state.current_df = None
         st.rerun()
         
     if not st.session_state.is_premium:
-        st.sidebar.write(f"الاستخدام: {st.session_state.usage_count}/10")
+        st.sidebar.write(f"Usage: {st.session_state.usage_count}/10")
         st.sidebar.markdown("---")
-        st.sidebar.subheader("ترقية إلى VIP 🚀")
-        st.sidebar.write("الاشتراك: $25 / شهرياً")
-        st.sidebar.write("حول على رقم الكي كارد:")
+        st.sidebar.subheader("Upgrade to VIP 🚀")
+        st.sidebar.write("Subscription: $25 / Month")
+        st.sidebar.write("Transfer to QiCard number:")
         st.sidebar.code("7280146585")
-        receipt = st.sidebar.file_uploader("ارفع صورة التحويل", type=['png', 'jpg', 'jpeg'])
-        if st.sidebar.button("تأكيد الدفع ✅"):
+        receipt = st.sidebar.file_uploader("Upload Transfer Screenshot", type=['png', 'jpg', 'jpeg'])
+        if st.sidebar.button("Confirm Payment ✅"):
             if receipt:
-                st.sidebar.success("تم إرسال الإيصال! سيتم تفعيل الـ VIP قريباً.")
+                st.sidebar.success("Receipt sent! Admin will activate your VIP soon.")
                 df = get_data()
                 df.loc[df['username'] == st.session_state.user_info['name'], 'receipt_img'] = "Pending Verification"
                 save_data(df)
             else:
-                st.sidebar.error("يرجى رفع الإيصال أولاً.")
+                st.sidebar.error("Please upload the receipt first.")
 
-    st.title("📊 لوحة تحكم QuickSheet")
+    st.title("📊 QuickSheet AI - Business")
     
     if not st.session_state.is_premium and st.session_state.usage_count >= 10:
-        st.error("انتهت الفترة التجريبية. يرجى الترقية للاستمرار.")
+        st.error("Trial ended. Upgrade to continue.")
         uploaded_files = None
     else:
-        uploaded_files = st.file_uploader("ارفع الجداول أو الصور", type=['png', 'jpg', 'jpeg'], accept_multiple_files=True)
+        uploaded_files = st.file_uploader("Upload tables", type=['png', 'jpg', 'jpeg'], accept_multiple_files=True)
 
     if uploaded_files:
-        user_note = st.text_input("أضف ملاحظة للذكاء الاصطناعي (اختياري)")
-        if st.button("بدء التحليل 🚀"):
-            with st.spinner('جاري التحليل...'):
+        user_note = st.text_input("Write a note to AI (optional)")
+        if st.button("Process Now 🚀"):
+            with st.spinner('AI is analyzing...'):
                 try:
                     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
                     model = genai.GenerativeModel('gemini-2.0-flash')
@@ -138,9 +103,9 @@ else:
                     
                     detailed_prompt = f"""
                     Act as a professional data entry expert. Extract ALL information from the image(s).
-                    1. Identify headers, rows, and labels.
+                    1. Identify headers, rows, and labels (Date, Receipt No, Phone, etc.).
                     2. Structure as a flat JSON list of objects [].
-                    3. Include all metadata in every row object.
+                    3. Include all metadata (Date, Phone, etc.) in every row object.
                     4. Use the exact labels found in the image.
                     5. If multiple images, combine rows into one continuous list.
                     Special Note: {user_note} 
@@ -153,7 +118,8 @@ else:
                         clean_json = re.search(r'\[.*\]', response.text, re.DOTALL)
                         if clean_json:
                             data = json.loads(clean_json.group())
-                            if data: st.session_state.current_df = pd.DataFrame(data)
+                            if data:
+                                st.session_state.current_df = pd.DataFrame(data)
                     else:
                         all_data = []
                         for uploaded_file in uploaded_files:
@@ -162,8 +128,10 @@ else:
                             clean_json = re.search(r'\[.*\]', response.text, re.DOTALL)
                             if clean_json:
                                 data = json.loads(clean_json.group())
-                                if data: all_data.extend(data)
-                        if all_data: st.session_state.current_df = pd.DataFrame(all_data)
+                                if data:
+                                    all_data.extend(data)
+                        if all_data:
+                            st.session_state.current_df = pd.DataFrame(all_data)
 
                     if st.session_state.current_df is not None:
                         if not st.session_state.is_premium:
@@ -171,48 +139,57 @@ else:
                             df_db = get_data()
                             df_db.loc[df_db['username'] == st.session_state.user_info['name'], 'usage'] = st.session_state.usage_count
                             save_data(df_db)
-                        st.success("تم التحليل بنجاح!")
+                        st.success("Analysis Complete!")
                 except Exception as e:
                     st.error(f"Error: {e}")
 
     if st.session_state.current_df is not None:
         st.divider()
-        st.subheader("💡 تحليلات تلقائية (Auto Insights)")
-        with st.expander("عرض ملخص الذكاء الاصطناعي", expanded=True):
+        st.subheader("Auto Insights 💡")
+        with st.expander("Show AI Analysis Summary", expanded=True):
             try:
                 insight_model = genai.GenerativeModel('gemini-2.0-flash')
                 insight_prompt = f"""
                 As an Iraqi Business Assistant named Echo, provide a 3-bullet point summary of this data in polite Iraqi dialect.
                 Data: {st.session_state.current_df.to_string()}
-                Focus on: Total sum, highest value, and patterns. Be encouraging.
+                Focus on: Total sum if applicable, highest value, and any missing data or patterns.
+                Be encouraging to the 'Hero'. Keep it short.
                 """
                 insight_res = insight_model.generate_content(insight_prompt)
                 st.info(insight_res.text)
             except:
-                st.write("التحليل التلقائي غير متوفر حالياً.")
+                st.write("AI analysis temporarily unavailable.")
 
-        st.subheader("💬 الدردشة التفاعلية")
+        st.subheader("Interactive Data Chat 💬")
         st.dataframe(st.session_state.current_df, use_container_width=True)
         
-        chat_input = st.chat_input("اطلب من الذكاء الاصطناعي تعديل الجدول (مثلاً: رتب حسب السعر)")
+        chat_input = st.chat_input("Ask AI to Sort, Filter, or Sum (e.g., 'اجمع الاجمالي بسطر جديد')")
         if chat_input:
-            with st.spinner('جاري التعديل...'):
+            with st.spinner('AI is updating your table...'):
                 try:
                     chat_model = genai.GenerativeModel('gemini-2.0-flash')
                     chat_prompt = f"""
                     Update the pandas DataFrame 'df' based on: {chat_input}.
                     Columns: {list(st.session_state.current_df.columns)}.
-                    STRICT: Use pd.to_numeric for math. Append ONE total row if asked for sum.
-                    Return ONLY valid python code starting with 'df = '.
+                    
+                    STRICT INSTRUCTIONS for the Hero:
+                    1. For any math/sum: First remove non-numeric characters (like commas, quotes, IQD) using:
+                       df['col'] = df['col'].astype(str).str.replace(r'[^\d.]', '', regex=True)
+                    2. Convert to numeric: df['col'] = pd.to_numeric(df['col'], errors='coerce').fillna(0)
+                    3. If 'اجمع' (sum) is asked: Append a SINGLE row at the bottom. 
+                       Example: df.loc['Total'] = df.sum(numeric_only=True)
+                    4. Return ONLY valid python code starting with 'df = '.
                     """
+                    
                     chat_res = chat_model.generate_content(chat_prompt)
                     clean_code = chat_res.text.replace('```python', '').replace('```', '').strip()
+                    
                     ldict = {'df': st.session_state.current_df.copy(), 'pd': pd}
                     exec(clean_code, globals(), ldict)
                     st.session_state.current_df = ldict['df']
                     st.rerun()
                 except Exception as e:
-                    st.error(f"خطأ: يرجى التأكد من اسم العمود. {e}")
+                    st.error(f"Try to name the column exactly. Error: {e}")
 
         buffer = io.BytesIO()
         with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
@@ -222,4 +199,4 @@ else:
                 max_len = max(st.session_state.current_df[col].astype(str).map(len).max(), len(str(col))) + 2
                 ws.column_dimensions[chr(65 + idx)].width = max_len
         
-        st.download_button("تحميل ملف إكسيل 📥", buffer.getvalue(), "QuickSheet_Analysis.xlsx")
+        st.download_button("Download Final Excel 📥", buffer.getvalue(), "QuickSheet_Analysis.xlsx")
