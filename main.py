@@ -35,6 +35,8 @@ if 'usage_count' not in st.session_state:
     st.session_state.usage_count = 0
 if 'is_premium' not in st.session_state:
     st.session_state.is_premium = False
+if 'current_df' not in st.session_state:
+    st.session_state.current_df = None
 
 if not st.session_state.user_info:
     st.title("QuickSheet AI Pro 📊")
@@ -96,7 +98,6 @@ else:
                 try:
                     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
                     model = genai.GenerativeModel('gemini-2.0-flash')
-                    buffer = io.BytesIO()
                     processed_any = False
                     should_merge = any(word in user_note.lower() for word in ["اجمع", "دمج", "merge", "combine", "واحد", "وحده"])
                     
@@ -118,31 +119,21 @@ else:
                         if clean_json:
                             data = json.loads(clean_json.group())
                             if data:
-                                df_final = pd.DataFrame(data)
-                                with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-                                    df_final.to_excel(writer, sheet_name="Combined_Data", index=False)
-                                    ws = writer.sheets["Combined_Data"]
-                                    for idx, col in enumerate(df_final.columns):
-                                        max_len = max(df_final[col].astype(str).map(len).max(), len(str(col))) + 2
-                                        ws.column_dimensions[chr(65 + idx)].width = max_len
+                                st.session_state.current_df = pd.DataFrame(data)
                                 processed_any = True
                     else:
-                        with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-                            for uploaded_file in uploaded_files:
-                                img = Image.open(uploaded_file)
-                                response = model.generate_content([detailed_prompt, img])
-                                clean_json = re.search(r'\[.*\]', response.text, re.DOTALL)
-                                if clean_json:
-                                    data = json.loads(clean_json.group())
-                                    if data:
-                                        df_temp = pd.DataFrame(data)
-                                        sh_name = f"sheet_{uploaded_file.name[:10]}"
-                                        df_temp.to_excel(writer, sheet_name=sh_name, index=False)
-                                        ws = writer.sheets[sh_name]
-                                        for idx, col in enumerate(df_temp.columns):
-                                            max_len = max(df_temp[col].astype(str).map(len).max(), len(str(col))) + 2
-                                            ws.column_dimensions[chr(65 + idx)].width = max_len
-                                        processed_any = True
+                        all_data = []
+                        for uploaded_file in uploaded_files:
+                            img = Image.open(uploaded_file)
+                            response = model.generate_content([detailed_prompt, img])
+                            clean_json = re.search(r'\[.*\]', response.text, re.DOTALL)
+                            if clean_json:
+                                data = json.loads(clean_json.group())
+                                if data:
+                                    all_data.extend(data)
+                        if all_data:
+                            st.session_state.current_df = pd.DataFrame(all_data)
+                            processed_any = True
 
                     if processed_any:
                         if not st.session_state.is_premium:
@@ -150,9 +141,43 @@ else:
                             df_all = get_data()
                             df_all.loc[df_all['username'] == st.session_state.user_info['name'], 'usage'] = st.session_state.usage_count
                             save_data(df_all)
-                        st.success("SUCCESS! DOWNLOAD YOUR FILE BELOW")
-                        st.download_button("Download Excel 📥", buffer.getvalue(), "Data.xlsx")
-                    else:
-                        st.warning("No data found in the images.")
+                        st.success("Analysis Complete!")
                 except Exception as e:
                     st.error(f"Error: {e}")
+
+    # --- Conversational Execution & Download Section ---
+    if st.session_state.current_df is not None:
+        st.divider()
+        st.subheader("Interactive Data Chat 💬")
+        st.dataframe(st.session_state.current_df, use_container_width=True)
+        
+        chat_input = st.chat_input("Ask AI to Sort, Filter, or Modify this table...")
+        if chat_input:
+            with st.spinner('AI is updating your table...'):
+                chat_model = genai.GenerativeModel('gemini-2.0-flash')
+                chat_prompt = f"""
+                You are a Pandas expert. Update the DataFrame 'df' based on: {chat_input}.
+                Columns: {list(st.session_state.current_df.columns)}.
+                Return ONLY valid Python code starting with 'df = '. No talk.
+                """
+                chat_res = chat_model.generate_content(chat_prompt)
+                code_match = re.search(r'df\s*=\s*.*', chat_res.text)
+                if code_match:
+                    try:
+                        df = st.session_state.current_df
+                        exec(code_match.group())
+                        st.session_state.current_df = df
+                        st.rerun()
+                    except:
+                        st.error("Failed to execute command.")
+
+        # Excel Download with Width Formatting
+        buffer = io.BytesIO()
+        with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+            st.session_state.current_df.to_excel(writer, index=False, sheet_name="Sheet1")
+            ws = writer.sheets["Sheet1"]
+            for idx, col in enumerate(st.session_state.current_df.columns):
+                max_len = max(st.session_state.current_df[col].astype(str).map(len).max(), len(str(col))) + 2
+                ws.column_dimensions[chr(65 + idx)].width = max_len
+        
+        st.download_button("Download Updated Excel 📥", buffer.getvalue(), "QuickSheet_Final.xlsx")
