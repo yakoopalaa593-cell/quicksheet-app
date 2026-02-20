@@ -38,6 +38,8 @@ if 'is_premium' not in st.session_state:
     st.session_state.is_premium = False
 if 'current_df' not in st.session_state:
     st.session_state.current_df = None
+if 'auto_insight_text' not in st.session_state:
+    st.session_state.auto_insight_text = None
 
 if not st.session_state.user_info:
     st.title("QuickSheet AI Pro 📊")
@@ -66,6 +68,7 @@ else:
     if st.sidebar.button("Logout"):
         st.session_state.user_info = None
         st.session_state.current_df = None
+        st.session_state.auto_insight_text = None
         st.rerun()
         
     if not st.session_state.is_premium:
@@ -104,7 +107,7 @@ else:
                     1. Mandatory Fields: Look for (Date, Receipt Number, Phone, Address, Customer Name, Total Amount).
                     2. Table Rows: Extract every item, quantity, and price.
                     3. Format: Return a flat JSON list []. 
-                    4. IMPORTANT: Repeat the 'Date', 'Receipt Number', and 'Customer' info in EVERY row object so no data is lost when exporting.
+                    4. IMPORTANT: Repeat the 'Date', 'Receipt Number', and 'Customer' info in EVERY row object.
                     5. Clean Numeric Data: For prices/totals, remove (IQD, $, commas) but keep the raw number.
                     6. User Note: {user_note}
                     Return ONLY raw JSON.
@@ -113,24 +116,24 @@ else:
                     all_data = []
                     for uploaded_file in uploaded_files:
                         img = Image.open(uploaded_file)
-                        try:
-                            response = model.generate_content([detailed_prompt, img])
-                            clean_json = re.search(r'\[.*\]', response.text, re.DOTALL)
-                            if clean_json:
-                                data = json.loads(clean_json.group())
-                                if data: all_data.extend(data)
-                            time.sleep(1)
-                        except Exception as e:
-                            if "429" in str(e):
-                                time.sleep(5)
-                                response = model.generate_content([detailed_prompt, img])
-                                clean_json = re.search(r'\[.*\]', response.text, re.DOTALL)
-                                if clean_json:
-                                    data = json.loads(clean_json.group())
-                                    if data: all_data.extend(data)
+                        response = model.generate_content([detailed_prompt, img])
+                        clean_json = re.search(r'\[.*\]', response.text, re.DOTALL)
+                        if clean_json:
+                            data = json.loads(clean_json.group())
+                            if data: all_data.extend(data)
+                        time.sleep(1)
                     
                     if all_data:
                         st.session_state.current_df = pd.DataFrame(all_data)
+                        
+                        try:
+                            insight_model = genai.GenerativeModel('gemini-2.0-flash')
+                            insight_prompt = f"Data: {st.session_state.current_df.to_string()}\nGive 3 quick insights in Iraqi dialect for the Hero. Focus on totals."
+                            insight_res = insight_model.generate_content(insight_prompt)
+                            st.session_state.auto_insight_text = insight_res.text
+                        except:
+                            st.session_state.auto_insight_text = "التحليل راح يجهز بعد شوية، كمل شغلك يا بطل."
+
                         if not st.session_state.is_premium:
                             st.session_state.usage_count += len(uploaded_files)
                             df_db = get_data()
@@ -143,13 +146,8 @@ else:
     if st.session_state.current_df is not None:
         st.divider()
         st.subheader("Auto Insights 💡")
-        try:
-            insight_model = genai.GenerativeModel('gemini-2.0-flash')
-            insight_prompt = f"Data: {st.session_state.current_df.to_string()}\nGive 3 quick insights in Iraqi dialect for the Hero."
-            insight_res = insight_model.generate_content(insight_prompt)
-            st.info(insight_res.text)
-        except:
-            st.write("Generating insights...")
+        if st.session_state.auto_insight_text:
+            st.info(st.session_state.auto_insight_text)
 
         st.subheader("Interactive Data Chat 💬")
         st.dataframe(st.session_state.current_df, use_container_width=True)
