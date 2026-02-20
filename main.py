@@ -8,7 +8,6 @@ import pandas as pd
 import gspread
 from google.oauth2.service_account import Credentials
 
-# --- 1. SETTINGS & CONNECTIONS ---
 info = dict(st.secrets["gcp_service_account"])
 info["private_key"] = info["private_key"].replace("\\n", "\n")
 
@@ -30,7 +29,6 @@ def save_data(df):
     sheet.clear()
     sheet.update([df.columns.values.tolist()] + df.values.tolist())
 
-# --- 2. SESSION STATE ---
 if 'user_info' not in st.session_state:
     st.session_state.user_info = None
 if 'usage_count' not in st.session_state:
@@ -40,7 +38,6 @@ if 'is_premium' not in st.session_state:
 if 'current_df' not in st.session_state:
     st.session_state.current_df = None
 
-# --- 3. LOGIN LOGIC ---
 if not st.session_state.user_info:
     st.title("QuickSheet AI Pro 📊")
     st.write("Welcome Hero! Simplify your work with AI.")
@@ -61,7 +58,6 @@ if not st.session_state.user_info:
                 st.session_state.is_premium = (user_dict['status'] == "VIP")
             st.rerun()
 else:
-    # --- 4. SIDEBAR (QI-CARD INFO) ---
     st.sidebar.write(f"Hello, {st.session_state.user_info['name']}")
     status = "💎 VIP Premium" if st.session_state.is_premium else "🆓 Free"
     st.sidebar.markdown(f"Status: {status}")
@@ -88,7 +84,6 @@ else:
             else:
                 st.sidebar.error("Please upload the receipt first.")
 
-    # --- 5. MAIN CONTENT ---
     st.title("📊 QuickSheet AI - Business")
     
     if not st.session_state.is_premium and st.session_state.usage_count >= 10:
@@ -106,7 +101,6 @@ else:
                     model = genai.GenerativeModel('gemini-2.0-flash')
                     should_merge = any(word in user_note.lower() for word in ["اجمع", "دمج", "merge", "combine", "واحد", "وحده"])
                     
-                    # Your Original Prompt - Preserved and Protected
                     detailed_prompt = f"""
                     Act as a professional data entry expert. Extract ALL information from the image(s).
                     1. Identify headers, rows, and labels (Date, Receipt No, Phone, etc.).
@@ -149,9 +143,23 @@ else:
                 except Exception as e:
                     st.error(f"Error: {e}")
 
-    # --- 6. CONVERSATIONAL EXECUTION SECTION ---
     if st.session_state.current_df is not None:
         st.divider()
+        st.subheader("Auto Insights 💡")
+        with st.expander("Show AI Analysis Summary", expanded=True):
+            try:
+                insight_model = genai.GenerativeModel('gemini-2.0-flash')
+                insight_prompt = f"""
+                As an Iraqi Business Assistant named Echo, provide a 3-bullet point summary of this data in polite Iraqi dialect.
+                Data: {st.session_state.current_df.to_string()}
+                Focus on: Total sum if applicable, highest value, and any missing data or patterns.
+                Be encouraging to the 'Hero'. Keep it short.
+                """
+                insight_res = insight_model.generate_content(insight_prompt)
+                st.info(insight_res.text)
+            except:
+                st.write("AI analysis temporarily unavailable.")
+
         st.subheader("Interactive Data Chat 💬")
         st.dataframe(st.session_state.current_df, use_container_width=True)
         
@@ -160,7 +168,7 @@ else:
             with st.spinner('AI is updating your table...'):
                 try:
                     chat_model = genai.GenerativeModel('gemini-2.0-flash')
-                    chat_prompt = chat_prompt = f"""
+                    chat_prompt = f"""
                     Update the pandas DataFrame 'df' based on: {chat_input}.
                     Columns: {list(st.session_state.current_df.columns)}.
                     
@@ -176,7 +184,6 @@ else:
                     chat_res = chat_model.generate_content(chat_prompt)
                     clean_code = chat_res.text.replace('```python', '').replace('```', '').strip()
                     
-                    # Execution Environment
                     ldict = {'df': st.session_state.current_df.copy(), 'pd': pd}
                     exec(clean_code, globals(), ldict)
                     st.session_state.current_df = ldict['df']
@@ -184,12 +191,10 @@ else:
                 except Exception as e:
                     st.error(f"Try to name the column exactly. Error: {e}")
 
-        # --- 7. EXCEL EXPORT WITH FORMATTING ---
         buffer = io.BytesIO()
         with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
             st.session_state.current_df.to_excel(writer, index=False, sheet_name="Sheet1")
             ws = writer.sheets["Sheet1"]
-            # Auto-adjust column width based on content
             for idx, col in enumerate(st.session_state.current_df.columns):
                 max_len = max(st.session_state.current_df[col].astype(str).map(len).max(), len(str(col))) + 2
                 ws.column_dimensions[chr(65 + idx)].width = max_len
