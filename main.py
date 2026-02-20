@@ -81,67 +81,78 @@ else:
             else:
                 st.sidebar.error("Please upload the receipt first.")
 
-st.title("📊 QuickSheet AI - Business")
+    st.title("📊 QuickSheet AI - Business")
+    
+    if not st.session_state.is_premium and st.session_state.usage_count >= 10:
+        st.error("Trial ended. Upgrade to continue.")
+        uploaded_files = None
+    else:
+        uploaded_files = st.file_uploader("Upload tables", type=['png', 'jpg', 'jpeg'], accept_multiple_files=True)
 
-if not st.session_state.is_premium and st.session_state.usage_count >= 10:
-    st.error("Trial ended. Upgrade to continue.")
-    uploaded_files = None
-else:
-    uploaded_files = st.file_uploader("Upload tables", type=['png', 'jpg', 'jpeg'], accept_multiple_files=True)
+    if uploaded_files:
+        user_note = st.text_input("Write a note to AI (optional)")
+        if st.button("Process Now 🚀"):
+            with st.spinner('AI is analyzing...'):
+                try:
+                    genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+                    model = genai.GenerativeModel('gemini-2.0-flash')
+                    buffer = io.BytesIO()
+                    processed_any = False
+                    should_merge = any(word in user_note.lower() for word in ["اجمع", "دمج", "merge", "combine", "واحد", "وحده"])
+                    
+                    detailed_prompt = f"""
+                    Act as a professional data entry expert. Extract ALL information from the image(s).
+                    1. Identify headers, rows, and labels (Date, Receipt No, Phone, etc.).
+                    2. Structure as a flat JSON list of objects [].
+                    3. Include all metadata (Date, Phone, etc.) in every row object.
+                    4. Use the exact labels found in the image.
+                    5. If multiple images, combine rows into one continuous list.
+                    Special Note: {user_note} 
+                    Return ONLY raw JSON.
+                    """
 
-if uploaded_files:
-    user_note = st.text_input("Write a note to AI (optional)")
-    if st.button("Process Now 🚀"):
-        with st.spinner('AI is analyzing...'):
-            try:
-                genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-                model = genai.GenerativeModel('gemini-2.0-flash')
-                buffer = io.BytesIO()
-                processed_any = False
-                should_merge = any(word in user_note.lower() for word in ["اجمع", "دمج", "merge", "combine", "واحد", "وحده"])
-                
-                detailed_prompt = f"""
-                Act as a professional data entry expert. Extract ALL information from the image(s).
-                1. Identify headers, rows, and labels.
-                2. Structure as JSON list of objects [].
-                3. Special Note: {user_note}
-                Return ONLY raw JSON.
-                """
+                    if should_merge:
+                        images = [Image.open(f) for f in uploaded_files]
+                        response = model.generate_content([detailed_prompt, *images])
+                        clean_json = re.search(r'\[.*\]', response.text, re.DOTALL)
+                        if clean_json:
+                            data = json.loads(clean_json.group())
+                            if data:
+                                df_final = pd.DataFrame(data)
+                                with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+                                    df_final.to_excel(writer, sheet_name="Combined_Data", index=False)
+                                    ws = writer.sheets["Combined_Data"]
+                                    for idx, col in enumerate(df_final.columns):
+                                        max_len = max(df_final[col].astype(str).map(len).max(), len(str(col))) + 2
+                                        ws.column_dimensions[chr(65 + idx)].width = max_len
+                                processed_any = True
+                    else:
+                        with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+                            for uploaded_file in uploaded_files:
+                                img = Image.open(uploaded_file)
+                                response = model.generate_content([detailed_prompt, img])
+                                clean_json = re.search(r'\[.*\]', response.text, re.DOTALL)
+                                if clean_json:
+                                    data = json.loads(clean_json.group())
+                                    if data:
+                                        df_temp = pd.DataFrame(data)
+                                        sh_name = f"sheet_{uploaded_file.name[:10]}"
+                                        df_temp.to_excel(writer, sheet_name=sh_name, index=False)
+                                        ws = writer.sheets[sh_name]
+                                        for idx, col in enumerate(df_temp.columns):
+                                            max_len = max(df_temp[col].astype(str).map(len).max(), len(str(col))) + 2
+                                            ws.column_dimensions[chr(65 + idx)].width = max_len
+                                        processed_any = True
 
-                if should_merge:
-                    images = [Image.open(f) for f in uploaded_files]
-                    response = model.generate_content([detailed_prompt, *images])
-                    clean_json = re.search(r'\[.*\]', response.text, re.DOTALL)
-                    if clean_json:
-                        data = json.loads(clean_json.group())
-                        if data:
-                            df_final = pd.DataFrame(data)
-                            with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-                                df_final.to_excel(writer, sheet_name="Combined_Data", index=False)
-                            processed_any = True
-                else:
-                    with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-                        for uploaded_file in uploaded_files:
-                            img = Image.open(uploaded_file)
-                            response = model.generate_content([detailed_prompt, img])
-                            clean_json = re.search(r'\[.*\]', response.text, re.DOTALL)
-                            if clean_json:
-                                data = json.loads(clean_json.group())
-                                if data:
-                                    df_temp = pd.DataFrame(data)
-                                    sh_name = f"sheet_{uploaded_file.name[:10]}"
-                                    df_temp.to_excel(writer, sheet_name=sh_name, index=False)
-                                    processed_any = True
-
-                if processed_any:
-                    if not st.session_state.is_premium:
-                        st.session_state.usage_count += len(uploaded_files)
-                        df_all = get_data()
-                        df_all.loc[df_all['username'] == st.session_state.user_info['name'], 'usage'] = st.session_state.usage_count
-                        save_data(df_all)
-                    st.success("SUCCESS! DOWNLOAD YOUR FILE BELOW")
-                    st.download_button("Download Excel 📥", buffer.getvalue(), "Data.xlsx")
-                else:
-                    st.warning("No data found in the images.")
-            except Exception as e:
-                st.error(f"Error: {e}")
+                    if processed_any:
+                        if not st.session_state.is_premium:
+                            st.session_state.usage_count += len(uploaded_files)
+                            df_all = get_data()
+                            df_all.loc[df_all['username'] == st.session_state.user_info['name'], 'usage'] = st.session_state.usage_count
+                            save_data(df_all)
+                        st.success("SUCCESS! DOWNLOAD YOUR FILE BELOW")
+                        st.download_button("Download Excel 📥", buffer.getvalue(), "Data.xlsx")
+                    else:
+                        st.warning("No data found in the images.")
+                except Exception as e:
+                    st.error(f"Error: {e}")
