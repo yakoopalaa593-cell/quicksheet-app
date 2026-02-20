@@ -58,12 +58,16 @@ def show_insights(df):
         if item_col: st.metric("أكثر مادة تكراراً", str(df[item_col].value_counts().idxmax()))
     with col3: st.metric("عدد القيود", len(df))
 
-if 'user_info' not in st.session_state: st.session_state.user_info = None
-if 'usage_count' not in st.session_state: st.session_state.usage_count = 0
-if 'is_premium' not in st.session_state: st.session_state.is_premium = False
+if 'user_info' not in st.session_state:
+    st.session_state.user_info = None
+if 'usage_count' not in st.session_state:
+    st.session_state.usage_count = 0
+if 'is_premium' not in st.session_state:
+    st.session_state.is_premium = False
 
 if not st.session_state.user_info:
     st.title("QuickSheet AI Pro 📊")
+    st.write("Welcome Hero! Simplify your work with AI.")
     name = st.text_input("Enter your Name/Email to start:")
     if st.button("Start Now 🚀"):
         if name:
@@ -71,23 +75,40 @@ if not st.session_state.user_info:
             user_row = df[df['username'] == name]
             if user_row.empty:
                 sheet.append_row([name, 0, "Free", ""])
-                st.session_state.user_info, st.session_state.usage_count, st.session_state.is_premium = {"name": name}, 0, False
+                st.session_state.user_info = {"name": name}
+                st.session_state.usage_count = 0
+                st.session_state.is_premium = False
             else:
                 user_dict = user_row.iloc[0].to_dict()
-                st.session_state.user_info, st.session_state.usage_count, st.session_state.is_premium = {"name": user_dict['username']}, int(user_dict['usage']), (user_dict['status'] == "VIP")
+                st.session_state.user_info = {"name": user_dict['username']}
+                st.session_state.usage_count = int(user_dict['usage'])
+                st.session_state.is_premium = (user_dict['status'] == "VIP")
             st.rerun()
 else:
     st.sidebar.write(f"Hello, {st.session_state.user_info['name']}")
+    status = "💎 VIP Premium" if st.session_state.is_premium else "🆓 Free"
+    st.sidebar.markdown(f"Status: {status}")
+    
     if st.sidebar.button("Logout"):
         st.session_state.user_info = None
         st.rerun()
+        
     if not st.session_state.is_premium:
         st.sidebar.write(f"Usage: {st.session_state.usage_count}/10")
+        st.sidebar.markdown("---")
+        st.sidebar.subheader("Upgrade to VIP 🚀")
+        st.sidebar.write("Subscription: $25 / Month")
+        st.sidebar.write("Transfer to QiCard number:")
+        st.sidebar.code("7280146585")
         receipt = st.sidebar.file_uploader("Upload Transfer Screenshot", type=['png', 'jpg', 'jpeg'])
-        if st.sidebar.button("Confirm Payment ✅") and receipt:
-            df = get_data()
-            df.loc[df['username'] == st.session_state.user_info['name'], 'receipt_img'] = "Pending Verification"
-            save_data(df)
+        if st.sidebar.button("Confirm Payment ✅"):
+            if receipt:
+                st.sidebar.success("Receipt sent! Admin will activate your VIP soon.")
+                df = get_data()
+                df.loc[df['username'] == st.session_state.user_info['name'], 'receipt_img'] = "Pending Verification"
+                save_data(df)
+            else:
+                st.sidebar.error("Please upload the receipt first.")
 
 st.title("📊 QuickSheet AI - Business")
 uploaded_files = st.file_uploader("Upload tables", type=['png', 'jpg', 'jpeg'], accept_multiple_files=True)
@@ -98,40 +119,68 @@ if uploaded_files:
     else:
         user_note = st.text_input("Write a note to AI (optional)")
         if st.button("Process Now 🚀"):
-            with st.spinner('AI is analyzing...'):
-                genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-                model = genai.GenerativeModel('gemini-2.0-flash')
-                buffer = io.BytesIO()
-                processed_any = False
-                should_merge = any(word in user_note.lower() for word in ["اجمع", "دمج", "merge", "combine", "واحد", "وحده"])
-                detailed_prompt = f"Extract ALL table data from image(s). Structure as a flat JSON list of objects []. Ensure every row has all columns (Date, Name, Price, etc.). Use null for missing. Note: {user_note}. Return ONLY raw JSON."
+            if not uploaded_files:
+                st.error("Please upload images first.")
+            else:
+                with st.spinner('AI is analyzing...'):
+                    genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+                    model = genai.GenerativeModel('gemini-2.0-flash')
+                    buffer = io.BytesIO()
+                    processed_any = False
+                    should_merge = any(word in user_note.lower() for word in ["اجمع", "دمج", "merge", "combine", "واحد", "وحده"])
+                    
+                    detailed_prompt = f"""
+                    Act as a professional data entry expert. Extract ALL information from the image(s).
+                    1. Identify headers, rows, and labels (Date, Receipt No, Phone, etc.).
+                    2. Structure as a flat JSON list of objects [].
+                    3. Include all metadata (Date, Phone, etc.) in every row object.
+                    4. Use the exact labels found in the image.
+                    5. If multiple images, combine rows into one continuous list.
+                    Special Note: {user_note}
+                    Return ONLY raw JSON.
+                    """
 
-                try:
-                    dfs_to_process = []
-                    if should_merge:
-                        images = [Image.open(f) for f in uploaded_files]
-                        response = model.generate_content([detailed_prompt, *images])
-                        clean_json = re.search(r'\[.*\]', response.text, re.DOTALL)
-                        if clean_json: dfs_to_process.append(("Combined_Data", pd.DataFrame(json.loads(clean_json.group()))))
-                    else:
-                        for f in uploaded_files:
-                            response = model.generate_content([detailed_prompt, Image.open(f)])
+                    try:
+                        if should_merge:
+                            images = [Image.open(f) for f in uploaded_files]
+                            response = model.generate_content([detailed_prompt, *images])
                             clean_json = re.search(r'\[.*\]', response.text, re.DOTALL)
-                            if clean_json: dfs_to_process.append((f"sheet_{f.name[:10]}", pd.DataFrame(json.loads(clean_json.group()))))
-
-                    if dfs_to_process:
-                        with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-                            for sheet_name, df in dfs_to_process:
-                                df.to_excel(writer, sheet_name=sheet_name, index=False)
-                                ws = writer.sheets[sheet_name]
-                                for idx, col in enumerate(df.columns):
-                                    max_len = max(df[col].astype(str).map(len).max(), len(str(col))) + 2
-                                    ws.column_dimensions[chr(65 + idx)].width = max_len
-                                if sheet_name == "Combined_Data" or len(dfs_to_process) == 1:
-                                    error_indices = perform_validation(df)
-                                    show_insights(df)
-                                    st.dataframe(df.style.apply(lambda x: ['background-color: #ffcccc' if x.name in error_indices else '' for _ in x], axis=1))
-                                processed_any = True
+                            if clean_json:
+                                data = json.loads(clean_json.group())
+                                if data:
+                                    df_final = pd.DataFrame(data)
+                                    error_indices = perform_validation(df_final)
+                                    show_insights(df_final)
+                                    st.dataframe(df_final.style.apply(lambda x: ['background-color: #ffcccc' if x.name in error_indices else '' for _ in x], axis=1))
+                                    with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+                                        df_final.to_excel(writer, sheet_name="Combined_Data", index=False)
+                                        ws = writer.sheets["Combined_Data"]
+                                        for idx, col in enumerate(df_final.columns):
+                                            max_len = max(df_final[col].astype(str).map(len).max(), len(str(col))) + 2
+                                            ws.column_dimensions[chr(65 + idx)].width = max_len
+                                    processed_any = True
+                        else:
+                            with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+                                for uploaded_file in uploaded_files:
+                                    img = Image.open(uploaded_file)
+                                    response = model.generate_content([detailed_prompt, img])
+                                    clean_json = re.search(r'\[.*\]', response.text, re.DOTALL)
+                                    if clean_json:
+                                        data = json.loads(clean_json.group())
+                                        if data:
+                                            df_temp = pd.DataFrame(data)
+                                            sh_name = f"sheet_{uploaded_file.name[:10]}"
+                                            df_temp.to_excel(writer, sheet_name=sh_name, index=False)
+                                            ws = writer.sheets[sh_name]
+                                            for idx, col in enumerate(df_temp.columns):
+                                                max_len = max(df_temp[col].astype(str).map(len).max(), len(str(col))) + 2
+                                                ws.column_dimensions[chr(65 + idx)].width = max_len
+                                            processed_any = True
+                                            st.write(f"✅ {uploaded_file.name} processed")
+                            if processed_any:
+                                df_for_insights = pd.DataFrame(data)
+                                show_insights(df_for_insights)
+                                st.dataframe(df_for_insights)
 
                         if processed_any:
                             if not st.session_state.is_premium:
@@ -141,4 +190,5 @@ if uploaded_files:
                                 save_data(df_all)
                             st.success("SUCCESS! DOWNLOAD YOUR FILE BELOW")
                             st.download_button("Download Excel 📥", buffer.getvalue(), "Data.xlsx")
-                except Exception as e: st.error(f"Error: {e}")
+                    except Exception as e:
+                        st.error(f"Error: {e}")
