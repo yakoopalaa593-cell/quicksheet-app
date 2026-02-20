@@ -102,14 +102,16 @@ else:
                     should_merge = any(word in user_note.lower() for word in ["اجمع", "دمج", "merge", "combine", "واحد", "وحده"])
                     
                     detailed_prompt = f"""
-                    Act as a professional data entry expert. Extract ALL information from the image(s).
-                    1. Identify headers, rows, and labels (Date, Receipt No, Phone, etc.).
-                    2. Structure as a flat JSON list of objects [].
-                    3. Include all metadata (Date, Phone, etc.) in every row object.
-                    4. Use the exact labels found in the image.
-                    5. If multiple images, combine rows into one continuous list.
-                    Special Note: {user_note} 
-                    Return ONLY raw JSON.
+                    Update the pandas DataFrame 'df' based on: {user_note}.
+                    Columns: To be extracted from image.
+                    
+                    STRICT INSTRUCTIONS for the Hero:
+                    1. For any math/sum: First remove non-numeric characters (like commas, quotes, IQD) using:
+                       df['col'] = df['col'].astype(str).str.replace(r'[^\d.]', '', regex=True)
+                    2. Convert to numeric: df['col'] = pd.to_numeric(df['col'], errors='coerce').fillna(0)
+                    3. If 'اجمع' (sum) is asked: Append a SINGLE row at the bottom. 
+                       Example: df.loc['Total'] = df.sum(numeric_only=True)
+                    4. Return ONLY raw JSON list of objects [].
                     """
 
                     if should_merge:
@@ -158,7 +160,7 @@ else:
                 insight_res = insight_model.generate_content(insight_prompt)
                 st.info(insight_res.text)
             except:
-                st.write("AI analysis temporarily unavailable.")
+                st.write("AI is processing your insights...")
 
         st.subheader("Interactive Data Chat 💬")
         st.dataframe(st.session_state.current_df, use_container_width=True)
