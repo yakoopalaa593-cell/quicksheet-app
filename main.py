@@ -160,17 +160,19 @@ else:
             with st.spinner('AI is updating your table...'):
                 try:
                     chat_model = genai.GenerativeModel('gemini-2.0-flash')
-                    chat_prompt = f"""
+                    chat_prompt = chat_prompt = f"""
                     Update the pandas DataFrame 'df' based on: {chat_input}.
-                    Current Columns: {list(st.session_state.current_df.columns)}.
+                    Columns: {list(st.session_state.current_df.columns)}.
                     
-                    STRICT RULES:
-                    1. DO NOT delete or overwrite any existing data unless explicitly asked to delete.
-                    2. If the user asks for a sum/total, append a NEW row at the end of 'df' with the result.
-                    3. For math, always use: df['col'] = pd.to_numeric(df['col'], errors='coerce').fillna(0)
-                    4. Keep all original rows intact.
-                    5. Return ONLY the python code starting with 'df = '. No markdown.
+                    STRICT INSTRUCTIONS for the Hero:
+                    1. For any math/sum: First remove non-numeric characters (like commas, quotes, IQD) using:
+                       df['col'] = df['col'].astype(str).str.replace(r'[^\d.]', '', regex=True)
+                    2. Convert to numeric: df['col'] = pd.to_numeric(df['col'], errors='coerce').fillna(0)
+                    3. If 'اجمع' (sum) is asked: Append a SINGLE row at the bottom. 
+                       Example: df.loc['Total'] = df.sum(numeric_only=True)
+                    4. Return ONLY valid python code starting with 'df = '.
                     """
+                    
                     chat_res = chat_model.generate_content(chat_prompt)
                     clean_code = chat_res.text.replace('```python', '').replace('```', '').strip()
                     
